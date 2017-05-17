@@ -1,0 +1,123 @@
+---
+title: "project week 4"
+author: "Gjeffroy"
+date: "May 17, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(caret)
+library(ggplot2)
+```
+
+
+Here we load the training  (19622 observations) and testing data set (20 observations). 
+```{r}
+
+training_messy <- read.csv("pml-training.csv")
+testing_messy <- read.csv("pml-testing.csv")
+
+```
+
+
+As we can see there are 160 variable but many columns contain only NA's so lets start by removing all the empty columns.
+```{r}
+rm_empty_col<- function(df){
+  j<- 1
+  for(i in 1:160){
+    if(sum(!is.na(df[,j]))/nrow(df) < 0.2)
+       df <- df[,-j]
+    else{j <- j +1}
+  }
+  df
+}
+
+training_messy[training_messy ==""]<- NA
+training<- rm_empty_col(training_messy)
+testing<- rm_empty_col(testing_messy)
+
+colnames(training) == colnames(testing)
+```
+
+We have now two clean dataset with the same variable (except the classe variable only in training and problem_id only in testing). 
+so we can start thinking of a predication model.
+
+
+# Dividing training to get a validation set
+```{r}
+inTrainingSet <- createDataPartition(training$classe, p = 0.7, list =F)
+training_set <- training[inTrainingSet,]
+validation_set <- training[-inTrainingSet,]
+```
+
+
+
+#Random forest model 
+## tuning model using caret::train()
+```{r, eval = F}
+set.seed(123)
+tunegrid <- expand.grid(.mtry=c(1:2))
+mtry <- sqrt(ncol(training_set))
+control <- trainControl(method="repeatedcv", number=10, repeats=1, search="grid")
+mod_RF <- train(classe ~ ., data = training_set, method = "rf",metric=mtry, tuneGrid=tunegrid, trControl=control)
+mod_RF
+
+ 
+pred_RF <- predict(mod_RF, training_set)
+pred_RF
+
+```
+
+lets plot the predicted classes vs true classes
+```{r}
+ggplot(data = data.frame(classe = training_set$classe, pred_classe = pred_RF),
+       aes(x= classe, y = pred_classe))+
+  geom_jitter(alpha = 0.3)
+```
+
+## test mod_RF on the validation set
+```{r}
+val_RF <- predict(mod_RF, validation_set)
+ggplot(data = data.frame(classe = validation_set$classe, pred_classe = val_RF),
+       aes(x= classe, y = pred_classe))+
+  geom_jitter(alpha = 0.3)
+
+confusionMatrix(validation_set$classe,  val_RF)
+```
+
+
+
+
+#gbm 
+```{r, eval = F}
+ctrl <- trainControl(method = "repeatedcv", 
+                     repeats = 2, 
+                     summaryFunction = twoClassSummary,
+                     classProbs = T)
+
+grid <- expand.grid(.interaction.depth = c(1,2),
+                    .n.trees = 100,
+                    .shrinkage = 0.1,
+                    .n.minobsinnode = c(10))
+
+mod_gbm <- train(classe~. , data = training_set, 
+                 method = "gbm", 
+                 metric = "ROC",
+                 trControl= ctrl,
+                 tuneGrid = grid,
+                 verbose = F)
+```
+
+
+
+#
+
+
+
+
+
+
+
+
